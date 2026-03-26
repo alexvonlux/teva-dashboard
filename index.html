@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEVA · Stock Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0c0f;
+    --bg2:      #111418;
+    --bg3:      #181c22;
+    --border:   rgba(255,255,255,0.07);
+    --border2:  rgba(255,255,255,0.13);
+    --text:     #e8eaed;
+    --muted:    #7a8394;
+    --accent:   #00d4a0;
+    --accent2:  #00a87e;
+    --red:      #ff5a5a;
+    --red2:     #cc3333;
+    --mono:     'DM Mono', monospace;
+    --display:  'Syne', sans-serif;
+  }
+
+  html { background: var(--bg); color: var(--text); font-family: var(--display); }
+
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse 60% 40% at 10% 0%, rgba(0,212,160,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 90% 100%, rgba(0,168,126,0.04) 0%, transparent 60%);
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(10,12,15,0.85);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-mark {
+    width: 32px; height: 32px;
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin-top: 1px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    display: inline-block;
+    margin-right: 5px;
+  }
+  .status-dot.live { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse-dot 2s ease-in-out infinite; }
+  .status-dot.closed { background: var(--red); }
+
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  #refresh-btn {
+    background: none;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  #refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 60px; }
+
+  /* Hero price row */
+  .hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 32px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+    animation: fadein 0.5s ease both;
+  }
+
+  @keyframes fadein { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+  .hero-left h1 {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+    font-family: var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  #price-usd {
+    font-size: clamp(40px, 8vw, 64px);
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+
+  #price-ils {
+    font-size: clamp(20px, 4vw, 28px);
+    font-weight: 400;
+    font-family: var(--mono);
+    color: var(--muted);
+  }
+
+  .change-pill {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: rgba(0,212,160,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(0,212,160,0.2);
+    transition: background 0.3s, color 0.3s;
+  }
+  .change-pill.down {
+    background: rgba(255,90,90,0.12);
+    color: var(--red);
+    border-color: rgba(255,90,90,0.2);
+  }
+
+  .hero-meta {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.8;
+    text-align: right;
+  }
+
+  /* Metrics grid */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+    animation: fadein 0.5s 0.1s ease both;
+  }
+
+  .metric-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: border-color 0.2s;
+  }
+  .metric-card:hover { border-color: var(--border2); }
+
+  .metric-card .label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .metric-card .value {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .metric-card .value.up { color: var(--accent); }
+  .metric-card .value.dn { color: var(--red); }
+
+  /* ILS rate row */
+  .ils-row {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 28px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: fadein 0.5s 0.15s ease both;
+  }
+  .ils-row span { color: var(--text); font-size: 13px; font-weight: 500; }
+
+  /* Chart section */
+  .chart-section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px 16px;
+    margin-bottom: 28px;
+    animation: fadein 0.5s 0.2s ease both;
+  }
+
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chart-title {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .tab-group {
+    display: flex;
+    gap: 4px;
+    background: var(--bg3);
+    border-radius: 8px;
+    padding: 3px;
+  }
+
+  .tab {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 5px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .tab.active { background: var(--bg2); color: var(--text); border: 1px solid var(--border2); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .chart-wrap { position: relative; height: 260px; }
+
+  /* Company info */
+  .info-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    animation: fadein 0.5s 0.25s ease both;
+  }
+
+  @media (max-width: 560px) { .info-section { grid-template-columns: 1fr; } }
+
+  .info-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+
+  .info-card h3 {
+    font-size: 10px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .k { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .info-row .v { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+
+  /* Error */
+  .error-bar {
+    background: rgba(255,90,90,0.1);
+    border: 1px solid rgba(255,90,90,0.25);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--red);
+    margin-bottom: 20px;
+    display: none;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+    line-height: 1.8;
+  }
+
+  footer a { color: var(--muted); text-decoration: underline; }
+
+  /* Skeleton loader */
+  .skel {
+    display: inline-block;
+    background: linear-gradient(90deg, var(--bg3) 25%, var(--bg2) 50%, var(--bg3) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px;
+    color: transparent;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  /* Auto-refresh countdown */
+  #countdown {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 600px) {
+    header { padding: 14px 16px; }
+    main { padding: 20px 14px 40px; }
+    .hero-meta { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">TEVA</div>
+    <div>
+      <div class="logo-text">Teva Stock</div>
+      <div class="logo-sub">NYSE · USD / ILS</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span><span class="status-dot" id="status-dot"></span><span id="status-text">Loading…</span></span>
+    <span id="countdown"></span>
+    <button id="refresh-btn" onclick="fetchAll()">↻ Refresh</button>
+  </div>
+</header>
+
+<main>
+  <div class="error-bar" id="error-bar"></div>
+
+  <section class="hero">
+    <div class="hero-left">
+      <h1>Teva Pharmaceutical · TEVA</h1>
+      <div class="price-row">
+        <div id="price-usd" class="skel">$00.00</div>
+        <div id="price-ils" class="skel">₪00.00</div>
+        <div id="change-pill" class="change-pill skel">+0.00%</div>
+      </div>
+    </div>
+    <div class="hero-meta" id="hero-meta">
+      &nbsp;
+    </div>
+  </section>
+
+  <div class="metrics">
+    <div class="metric-card"><div class="label">Day Low</div><div class="value skel" id="m-low">$0.00</div></div>
+    <div class="metric-card"><div class="label">Day High</div><div class="value skel" id="m-high">$0.00</div></div>
+    <div class="metric-card"><div class="label">Prev Close</div><div class="value skel" id="m-prev">$0.00</div></div>
+    <div class="metric-card"><div class="label">Volume</div><div class="value skel" id="m-vol">—</div></div>
+    <div class="metric-card"><div class="label">52w Low</div><div class="value skel" id="m-52l">$0.00</div></div>
+    <div class="metric-card"><div class="label">52w High</div><div class="value skel" id="m-52h">$0.00</div></div>
+    <div class="metric-card"><div class="label">Market Cap</div><div class="value skel" id="m-cap">—</div></div>
+    <div class="metric-card"><div class="label">P/E Ratio</div><div class="value skel" id="m-pe">—</div></div>
+  </div>
+
+  <div class="ils-row" id="ils-row">
+    <span>&#9654;</span> USD/ILS exchange rate: loading…
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-header">
+      <div class="chart-title">Price chart</div>
+      <div class="tab-group">
+        <button class="tab active" onclick="setRange('1d',this)">1D</button>
+        <button class="tab" onclick="setRange('5d',this)">5D</button>
+        <button class="tab" onclick="setRange('1mo',this)">1M</button>
+        <button class="tab" onclick="setRange('6mo',this)">6M</button>
+        <button class="tab" onclick="setRange('1y',this)">1Y</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="info-section">
+    <div class="info-card">
+      <h3>Company</h3>
+      <div class="info-row"><span class="k">Full name</span><span class="v">Teva Pharmaceutical Industries</span></div>
+      <div class="info-row"><span class="k">Founded</span><span class="v">1901 · Jerusalem</span></div>
+      <div class="info-row"><span class="k">Headquarters</span><span class="v">Tel Aviv, Israel</span></div>
+      <div class="info-row"><span class="k">Sector</span><span class="v">Generic Pharma</span></div>
+      <div class="info-row"><span class="k">Employees</span><span class="v">~37,000</span></div>
+    </div>
+    <div class="info-card">
+      <h3>Trading</h3>
+      <div class="info-row"><span class="k">Exchange</span><span class="v">NYSE (New York)</span></div>
+      <div class="info-row"><span class="k">Ticker</span><span class="v">TEVA</span></div>
+      <div class="info-row"><span class="k">Currency</span><span class="v">USD &amp; ILS (dual-listed)</span></div>
+      <div class="info-row"><span class="k">TASE ticker</span><span class="v">TEVA (Tel Aviv)</span></div>
+      <div class="info-row"><span class="k">Data source</span><span class="v">Yahoo Finance</span></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Data sourced from Finnhub.io · Prices may be delayed up to 15 minutes<br>
+  This dashboard is for informational purposes only · Not financial advice<br>
+  Auto-refreshes every 60 seconds during market hours
+</footer>
+
+
+<script>
+// ── CONFIGURATION ─────────────────────────────────────────────────────────────
+// Get your FREE API key at https://finnhub.io (30 seconds, no credit card)
+// Replace the string below with your key:
+const FINNHUB_KEY = 'd72kiqhr01qlfd9njafgd72kiqhr01qlfd9njag0';
+// ──────────────────────────────────────────────────────────────────────────────
+
+let chartInst = null;
+let currentRange = '1d';
+let ilsRate = null;
+let countdownSec = 60;
+let countdownTimer = null;
+let lastChange = 0;
+
+function fmtUSD(n) { return n != null ? '$' + Number(n).toFixed(2) : '—'; }
+function fmtILS(n) { return (n != null && ilsRate) ? '₪' + (n * ilsRate).toFixed(2) : ''; }
+function fmtVol(n) {
+  if (!n) return '—';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return String(n);
+}
+function removeSkel(el) { el.classList.remove('skel'); }
+
+function fh(path) {
+  const sep = path.includes('?') ? '&' : '?';
+  return fetch('https://finnhub.io/api/v1' + path + sep + 'token=' + FINNHUB_KEY)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+}
+
+// Alpha Vantage - free chart data, works directly from browser
+async function fetchCandles(range) {
+  const base = 'https://www.alphavantage.co/query';
+  const key = 'demo';
+  let url, seriesKey, cutMs;
+
+  if (range === '1d' || range === '5d') {
+    const interval = range === '1d' ? '5min' : '30min';
+    cutMs = range === '1d' ? 86400000 : 5 * 86400000;
+    url = base + '?function=TIME_SERIES_INTRADAY&symbol=TEVA&interval=' + interval + '&outputsize=compact&apikey=' + key;
+    seriesKey = 'Time Series (' + interval + ')';
+  } else {
+    const cutDays = range === '1mo' ? 30 : range === '6mo' ? 180 : 365;
+    cutMs = cutDays * 86400000;
+    url = base + '?function=TIME_SERIES_WEEKLY&symbol=TEVA&outputsize=full&apikey=' + key;
+    seriesKey = 'Weekly Time Series';
+  }
+
+  const d = await fetch(url).then(r => r.json());
+  const series = d[seriesKey];
+  if (!series) return null;
+  const cutoff = Date.now() - cutMs;
+  const entries = Object.entries(series)
+    .filter(([t]) => new Date(t).getTime() >= cutoff)
+    .sort((a, b) => a[0] < b[0] ? -1 : 1);
+  return {
+    t: entries.map(([t]) => new Date(t).getTime() / 1000),
+    c: entries.map(([, v]) => parseFloat(v['4. close']))
+  };
+}
+
+function renderChart(candles, up) {
+  if (!candles || candles.s !== 'ok' || !candles.t || !candles.t.length) return;
+  const labels = candles.t.map(t => {
+    const d = new Date(t * 1000);
+    if (currentRange === '1d') return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    if (currentRange === '5d') return d.toLocaleDateString([], {weekday:'short'}) + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    return d.toLocaleDateString([], {month:'short', day:'numeric'});
+  });
+  const closes = candles.c.map(v => parseFloat(v.toFixed(2)));
+  const minV = Math.min(...closes), maxV = Math.max(...closes);
+  const pad = (maxV - minV) * 0.12 || 0.5;
+  const lineColor = up ? '#00d4a0' : '#ff5a5a';
+  const fillColor = up ? 'rgba(0,212,160,0.07)' : 'rgba(255,90,90,0.07)';
+  if (chartInst) chartInst.destroy();
+  chartInst = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels, datasets: [{ data: closes, borderColor: lineColor, backgroundColor: fillColor,
+      borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: lineColor,
+      fill: true, tension: 0.3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#181c22', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+          titleColor: '#7a8394', bodyColor: '#e8eaed',
+          titleFont: { family: 'DM Mono', size: 11 }, bodyFont: { family: 'DM Mono', size: 13 },
+          callbacks: { label: ctx => { const v = ctx.parsed.y; let s = ' $'+v.toFixed(2); if(ilsRate) s += '  \u20aa'+(v*ilsRate).toFixed(2); return s; } }
+        }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 7, font:{family:'DM Mono',size:10}, color:'#7a8394' }, grid:{display:false}, border:{color:'rgba(255,255,255,0.06)'} },
+        y: { min: parseFloat((minV-pad).toFixed(2)), max: parseFloat((maxV+pad).toFixed(2)),
+             ticks: { font:{family:'DM Mono',size:10}, color:'#7a8394', callback: v=>'$'+v.toFixed(2) },
+             grid:{color:'rgba(255,255,255,0.04)'}, border:{color:'rgba(255,255,255,0.06)'} }
+      }
+    }
+  });
+}
+
+async function setRange(range, btn) {
+  currentRange = range;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  if (FINNHUB_KEY === 'YOUR_API_KEY_HERE') { showApiKeyPrompt(); return; }
+  try {
+    const candles = await fetchCandles(range);
+    renderChart(candles, lastChange >= 0);
+  } catch(e) { showError('Chart load failed: ' + e.message); }
+}
+
+function showError(msg) {
+  const bar = document.getElementById('error-bar');
+  bar.style.display = 'block';
+  bar.innerHTML = '\u26a0 ' + msg;
+}
+function showApiKeyPrompt() {
+  const bar = document.getElementById('error-bar');
+  bar.style.display = 'block';
+  bar.innerHTML = '\uD83D\uDD11 Add your free Finnhub API key: go to <a href="https://finnhub.io" target="_blank" style="color:inherit;text-decoration:underline">finnhub.io</a>, sign up free, copy your key, and replace <code>YOUR_API_KEY_HERE</code> in the HTML file.';
+}
+function clearError() { document.getElementById('error-bar').style.display = 'none'; }
+
+function isMarketOpen() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const mins = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return day >= 1 && day <= 5 && mins >= 870 && mins < 1260;
+}
+
+function startCountdown() {
+  clearInterval(countdownTimer);
+  countdownSec = 60;
+  const el = document.getElementById('countdown');
+  countdownTimer = setInterval(() => {
+    countdownSec--;
+    el.textContent = countdownSec + 's';
+    if (countdownSec <= 0) { clearInterval(countdownTimer); fetchAll(); }
+  }, 1000);
+}
+
+async function fetchAll() {
+  clearError();
+  if (FINNHUB_KEY === 'YOUR_API_KEY_HERE') { showApiKeyPrompt(); return; }
+  document.getElementById('refresh-btn').textContent = '\u21bb Loading\u2026';
+
+  try {
+    const [quote, metrics] = await Promise.all([
+      fh('/quote?symbol=TEVA'),
+      fh('/stock/metric?symbol=TEVA&metric=all')
+    ]);
+
+    // Get USD/ILS rate from free API
+    try {
+      const fx = await fetch('https://api.exchangerate-api.com/v4/latest/USD').then(r => r.json());
+      if (fx && fx.rates && fx.rates.ILS) ilsRate = fx.rates.ILS;
+    } catch(e) {}
+
+    const price = quote.c, prev = quote.pc;
+    const change = price - prev, pct = (change / prev) * 100;
+    const up = change >= 0;
+    lastChange = change;
+
+    const priceEl = document.getElementById('price-usd');
+    removeSkel(priceEl);
+    priceEl.textContent = fmtUSD(price);
+    priceEl.style.color = up ? 'var(--accent)' : 'var(--red)';
+
+    const ilsEl = document.getElementById('price-ils');
+    removeSkel(ilsEl);
+    ilsEl.textContent = fmtILS(price);
+
+    const pill = document.getElementById('change-pill');
+    removeSkel(pill);
+    pill.textContent = (up?'+':'') + change.toFixed(2) + ' (' + (up?'+':'') + pct.toFixed(2) + '%)';
+    pill.className = 'change-pill' + (up ? '' : ' down');
+
+    const open = isMarketOpen();
+    const dot = document.getElementById('status-dot');
+    const stEl = document.getElementById('status-text');
+    dot.className = 'status-dot' + (open ? ' live' : ' closed');
+    stEl.textContent = open ? 'Market open' : 'Market closed';
+
+    const now = new Date();
+    document.getElementById('hero-meta').innerHTML =
+      'As of ' + now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '<br>' +
+      now.toLocaleDateString([], {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+    const m = metrics.metric || {};
+    const upd = (id, val) => { const el=document.getElementById(id); removeSkel(el); el.textContent=val; };
+    upd('m-low',  fmtUSD(quote.l));
+    upd('m-high', fmtUSD(quote.h));
+    upd('m-prev', fmtUSD(prev));
+    upd('m-vol',  fmtVol(quote.v || null));
+    upd('m-52l',  fmtUSD(m['52WeekLow']));
+    upd('m-52h',  fmtUSD(m['52WeekHigh']));
+    upd('m-cap',  m.marketCapitalization ? '$' + (m.marketCapitalization/1000).toFixed(2) + 'B' : '\u2014');
+    upd('m-pe',   m.peBasicExclExtraTTM ? m.peBasicExclExtraTTM.toFixed(1) : '\u2014');
+
+    if (ilsRate) {
+      document.getElementById('ils-row').innerHTML =
+        '<span>&#9654;</span> 1 USD = <span>\u20aa' + ilsRate.toFixed(4) + '</span> &nbsp;&middot;&nbsp; ' +
+        'TEVA in ILS: <span>\u20aa' + (price*ilsRate).toFixed(2) + '</span> &nbsp;&middot;&nbsp; ' +
+        'Day range: <span>\u20aa' + (quote.l*ilsRate).toFixed(2) + ' \u2013 \u20aa' + (quote.h*ilsRate).toFixed(2) + '</span>';
+    }
+
+    const candles = await fetchCandles(currentRange);
+    renderChart(candles, up);
+    startCountdown();
+
+  } catch(e) {
+    showError('Could not load data: ' + e.message);
+    startCountdown();
+  }
+
+  document.getElementById('refresh-btn').textContent = '\u21bb Refresh';
+}
+
+fetchAll();
+</script>
+</body>
+</html>
