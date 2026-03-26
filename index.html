@@ -495,7 +495,7 @@ function removeSkel(el) { el.classList.remove('skel'); }
 
 const AV = 'https://www.alphavantage.co/query';
 function av(params) {
-  const qs = Object.entries({...params, apikey: 'demo'}).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&');
+  const qs = Object.entries({...params, apikey: '84UISXJ1PJF2MOE0'}).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&');
   return fetch(AV + '?' + qs).then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
 
