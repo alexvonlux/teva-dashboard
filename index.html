@@ -474,11 +474,7 @@
 
 
 <script>
-// ── CONFIGURATION ─────────────────────────────────────────────────────────────
-// Get your FREE API key at https://finnhub.io (30 seconds, no credit card)
-// Replace the string below with your key:
-const FINNHUB_KEY = 'd72kiqhr01qlfd9njafgd72kiqhr01qlfd9njag0';
-// ──────────────────────────────────────────────────────────────────────────────
+// Data provided by Alpha Vantage (free, no key needed for TEVA)
 
 let chartInst = null;
 let currentRange = '1d';
@@ -497,10 +493,10 @@ function fmtVol(n) {
 }
 function removeSkel(el) { el.classList.remove('skel'); }
 
-function fh(path) {
-  const sep = path.includes('?') ? '&' : '?';
-  return fetch('https://finnhub.io/api/v1' + path + sep + 'token=' + FINNHUB_KEY)
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+const AV = 'https://www.alphavantage.co/query';
+function av(params) {
+  const qs = Object.entries({...params, apikey: 'demo'}).map(([k,v]) => k+'='+encodeURIComponent(v)).join('&');
+  return fetch(AV + '?' + qs).then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
 
 // Alpha Vantage - free chart data, works directly from browser
@@ -579,7 +575,6 @@ async function setRange(range, btn) {
   currentRange = range;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
-  if (FINNHUB_KEY === 'YOUR_API_KEY_HERE') { showApiKeyPrompt(); return; }
   try {
     const candles = await fetchCandles(range);
     renderChart(candles, lastChange >= 0);
@@ -618,25 +613,29 @@ function startCountdown() {
 
 async function fetchAll() {
   clearError();
-  if (FINNHUB_KEY === 'YOUR_API_KEY_HERE') { showApiKeyPrompt(); return; }
   document.getElementById('refresh-btn').textContent = '\u21bb Loading\u2026';
 
   try {
-    const [quote, metrics] = await Promise.all([
-      fh('/quote?symbol=TEVA'),
-      fh('/stock/metric?symbol=TEVA&metric=all')
+    const [quoteResp, overviewResp, fxResp] = await Promise.all([
+      av({function: 'GLOBAL_QUOTE', symbol: 'TEVA'}),
+      av({function: 'OVERVIEW', symbol: 'TEVA'}),
+      fetch('https://api.exchangerate-api.com/v4/latest/USD').then(r=>r.json()).catch(()=>null)
     ]);
 
-    // Get USD/ILS rate from free API
-    try {
-      const fx = await fetch('https://api.exchangerate-api.com/v4/latest/USD').then(r => r.json());
-      if (fx && fx.rates && fx.rates.ILS) ilsRate = fx.rates.ILS;
-    } catch(e) {}
+    if (fxResp && fxResp.rates && fxResp.rates.ILS) ilsRate = fxResp.rates.ILS;
 
-    const price = quote.c, prev = quote.pc;
-    const change = price - prev, pct = (change / prev) * 100;
-    const up = change >= 0;
-    lastChange = change;
+    const q = quoteResp['Global Quote'];
+    if (!q || !q['05. price']) throw new Error('No quote data — API may be rate-limited, try again in 1 minute');
+
+    const price  = parseFloat(q['05. price']);
+    const prev   = parseFloat(q['08. previous close']);
+    const change = parseFloat(q['09. change']);
+    const pct    = parseFloat(q['10. change percent']);
+    const high   = parseFloat(q['03. high']);
+    const low    = parseFloat(q['04. low']);
+    const vol    = parseInt(q['06. volume']);
+    const up     = change >= 0;
+    lastChange   = change;
 
     const priceEl = document.getElementById('price-usd');
     removeSkel(priceEl);
@@ -663,22 +662,21 @@ async function fetchAll() {
       'As of ' + now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '<br>' +
       now.toLocaleDateString([], {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
-    const m = metrics.metric || {};
     const upd = (id, val) => { const el=document.getElementById(id); removeSkel(el); el.textContent=val; };
-    upd('m-low',  fmtUSD(quote.l));
-    upd('m-high', fmtUSD(quote.h));
+    upd('m-low',  fmtUSD(low));
+    upd('m-high', fmtUSD(high));
     upd('m-prev', fmtUSD(prev));
-    upd('m-vol',  fmtVol(quote.v || null));
-    upd('m-52l',  fmtUSD(m['52WeekLow']));
-    upd('m-52h',  fmtUSD(m['52WeekHigh']));
-    upd('m-cap',  m.marketCapitalization ? '$' + (m.marketCapitalization/1000).toFixed(2) + 'B' : '\u2014');
-    upd('m-pe',   m.peBasicExclExtraTTM ? m.peBasicExclExtraTTM.toFixed(1) : '\u2014');
+    upd('m-vol',  fmtVol(vol));
+    upd('m-52l',  overviewResp['52WeekLow']  ? '$'+parseFloat(overviewResp['52WeekLow']).toFixed(2)  : '\u2014');
+    upd('m-52h',  overviewResp['52WeekHigh'] ? '$'+parseFloat(overviewResp['52WeekHigh']).toFixed(2) : '\u2014');
+    upd('m-cap',  overviewResp['MarketCapitalization'] ? '$'+(parseInt(overviewResp['MarketCapitalization'])/1e9).toFixed(2)+'B' : '\u2014');
+    upd('m-pe',   overviewResp['PERatio'] && overviewResp['PERatio'] !== 'None' ? parseFloat(overviewResp['PERatio']).toFixed(1) : '\u2014');
 
     if (ilsRate) {
       document.getElementById('ils-row').innerHTML =
         '<span>&#9654;</span> 1 USD = <span>\u20aa' + ilsRate.toFixed(4) + '</span> &nbsp;&middot;&nbsp; ' +
         'TEVA in ILS: <span>\u20aa' + (price*ilsRate).toFixed(2) + '</span> &nbsp;&middot;&nbsp; ' +
-        'Day range: <span>\u20aa' + (quote.l*ilsRate).toFixed(2) + ' \u2013 \u20aa' + (quote.h*ilsRate).toFixed(2) + '</span>';
+        'Day range: <span>\u20aa' + (low*ilsRate).toFixed(2) + ' \u2013 \u20aa' + (high*ilsRate).toFixed(2) + '</span>';
     }
 
     const candles = await fetchCandles(currentRange);
@@ -692,7 +690,6 @@ async function fetchAll() {
 
   document.getElementById('refresh-btn').textContent = '\u21bb Refresh';
 }
-
 fetchAll();
 </script>
 </body>
